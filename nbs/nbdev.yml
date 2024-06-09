@@ -1,0 +1,9 @@
+project:
+  output-dir: _docs
+
+website:
+  title: "exam-sort-ocr"
+  site-url: "https://vrodriguezf.github.io/exam-sort-ocr"
+  description: "Sort exams with OCR"
+  repo-branch: main
+  repo-url: "https://github.com/vrodriguezf/exam-sort-ocr"
