@@ -2,7 +2,7 @@
 
 # %% auto 0
 __all__ = ['DEFAULT_SYSTEM_PROMPT', 'DEFAULT_USER_PROMPT', 'split_pdf', 'encode_image', 'num_tokens_from_messages',
-           'extract_student_info', 'rename_exam_file']
+           'extract_student_info', 'rename_exam_file', 'rename_all_exam_files']
 
 # %% ../nbs/00_core.ipynb 2
 import base64
@@ -19,25 +19,52 @@ from fastcore.all import *
 
 # %% ../nbs/00_core.ipynb 4
 def split_pdf(file_path, every=1, until=None, output_folder=None):
+    """
+    Split a PDF file into multiple smaller PDF files.
+
+    Args:
+        file_path (str): The path to the input PDF file.
+        every (int, optional): The interval at which to split the PDF. Default is 1.
+        until (int, optional): The page number until which to split the PDF. Default is None.
+        output_folder (str, optional): The folder where the split PDF files will be saved. Default is None.
+
+    Returns:
+        int: The number of splits performed.
+
+    """
     pdf_file = PyPDF2.PdfFileReader(file_path)
+    total_pages = pdf_file.getNumPages()
+    if until is None:
+        until = total_pages
+    
+    if output_folder is None:
+        output_folder = os.path.dirname(file_path)
+    else:
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+    
+    basename = os.path.splitext(os.path.basename(file_path))[0]
+    
     pdf_writer = PyPDF2.PdfFileWriter()
-
     num_splits = 0
-    for page in range(pdf_file.getNumPages()):
+    
+    for page in range(total_pages):
         pdf_writer.addPage(pdf_file.getPage(page))
-
-        # If it's the n page or the 'until' page, save the current selection
-        if until is None:
-            until = pdf_file.getNumPages()
-        if output_folder is None:
-            output_folder = os.path.dirname(file_path)
-        basename = os.path.splitext(os.path.basename(file_path))[0]
-        if page % every == 0 or page == until:
-            output_file = f"{output_folder}/{basename}_page_{page}.pdf"
+        
+        if (page + 1) % every == 0 or page + 1 == until:
+            output_file = f"{output_folder}/{basename}_page_{page + 1}.pdf"
             with open(output_file, "wb") as out:
                 pdf_writer.write(out)
             pdf_writer = PyPDF2.PdfFileWriter()
             num_splits += 1
+    
+    # Write remaining pages if any
+    if pdf_writer.getNumPages() > 0:
+        output_file = f"{output_folder}/{basename}_page_{page + 1}.pdf"
+        with open(output_file, "wb") as out:
+            pdf_writer.write(out)
+        num_splits += 1
+    
     return num_splits
 
 # %% ../nbs/00_core.ipynb 6
@@ -109,11 +136,14 @@ def extract_student_info(path_pdf: str, crop=None, api_key = None,
                   converted to an image.")
         
         # Convert the PDF to images and get the first one
-        image = convert_from_path(path_pdf, last_page=1, first_page=0, fmt='jpeg')[0]
+        image = convert_from_path(path_pdf, fmt='jpeg')[0]
 
         # Crop the image
         if crop:
             image = image.crop(crop)
+        
+        if verbose:
+            image.show()
         
         # Convert to base64
         buffered = io.BytesIO()
@@ -152,21 +182,25 @@ def extract_student_info(path_pdf: str, crop=None, api_key = None,
         }
         response = requests.post("https://api.openai.com/v1/chat/completions", 
                                  headers=headers, json=payload)
+        res = json.loads(response.json()['choices'][0]['message']['content'])
+        if verbose:
+            print(res)
         
-        return json.loads(response.json()['choices'][0]['message']['content'])
+        return res 
 
 # %% ../nbs/00_core.ipynb 13
 @delegates(extract_student_info)
-def rename_exam_file(pdf_path: str, output_path: str, keep_old=True, **kwargs):
+def rename_exam_file(pdf_path: str, output_folder=None, keep_old=True, **kwargs):
     """
     Extracts student information from an exam PDF file using OpenAI's chatGPT and renames that
     file with the extracted information as the name.
 
     Parameters:
     - pdf_path (str): The path to the input PDF file.
-    - output_path (str): The path to the directory where the renamed file will be saved.
-    - **kwargs: Additional keyword arguments to be passed to the `extract_student_info` function.
+    - output_folder (str): The path to the directory where the renamed file will be saved. 
+    If not provided, the file will be saved in the same directory as the input file.
     - keep_old (bool): Whether to keep the old file or not.
+    - **kwargs: Additional keyword arguments to be passed to the `extract_student_info` function.
 
     Returns:
     - new_name (str): The new name of the renamed file.
@@ -177,11 +211,36 @@ def rename_exam_file(pdf_path: str, output_path: str, keep_old=True, **kwargs):
     """
     info = extract_student_info(pdf_path, **kwargs)
     new_name = f"{info['Apellidos']}_{info['Nombre']}.pdf"
-    new_file_path = os.path.join(output_path, new_name)
+    new_file_path = os.path.join(output_folder, new_name)
     if not keep_old:
         os.rename(pdf_path, new_file_path)
     else:
-        os.makedirs(output_path, exist_ok=True)
+        os.makedirs(output_folder, exist_ok=True)
         shutil.copy(pdf_path, new_file_path)
         
     return new_name
+
+# %% ../nbs/00_core.ipynb 15
+@delegates(rename_exam_file)
+def rename_all_exam_files(input_folder: str, **kwargs):
+    """
+    Renames all the exam PDF files in a folder with the extracted student information.
+
+    Parameters:
+    - input_folder (str): The path to the folder containing the input PDF files.
+    - **kwargs: Additional keyword arguments to be passed to the `rename_exam_file` function.
+
+    Returns:
+    - new_names (list): A list of the new names of the renamed files.
+
+    Example:
+    >>> rename_all_exam_files('/path/to/folder', option1='value1', option2='value2')
+    ['Doe_John.pdf', 'Smith_Alice.pdf']
+    """
+    pdf_files = [f for f in os.listdir(input_folder) if f.endswith('.pdf')]
+    new_names = []
+    for pdf_file in pdf_files:
+        pdf_path = os.path.join(input_folder, pdf_file)
+        new_name = rename_exam_file(pdf_path, output_folder=input_folder, **kwargs)
+        new_names.append(new_name)
+    return new_names
