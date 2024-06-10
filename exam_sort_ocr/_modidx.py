@@ -9,4 +9,5 @@ d = { 'settings': { 'branch': 'main',
                                     'exam_sort_ocr.core.extract_student_info': ('core.html#extract_student_info', 'exam_sort_ocr/core.py'),
                                     'exam_sort_ocr.core.num_tokens_from_messages': ( 'core.html#num_tokens_from_messages',
                                                                                      'exam_sort_ocr/core.py'),
-                                    'exam_sort_ocr.core.rename_exam_file': ('core.html#rename_exam_file', 'exam_sort_ocr/core.py')}}}
+                                    'exam_sort_ocr.core.rename_exam_file': ('core.html#rename_exam_file', 'exam_sort_ocr/core.py'),
+                                    'exam_sort_ocr.core.split_pdf': ('core.html#split_pdf', 'exam_sort_ocr/core.py')}}}
