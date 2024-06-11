@@ -1,0 +1,1 @@
+Extract the last name (Apellidos in Spanish) and the first name (Nombre in Spanish) from the top of the image, and turn them into upper case. You will find them handwritten after the labels **Apellidos** and **Nombre** respectively. The fields of your JSON output will have those exact same label names.

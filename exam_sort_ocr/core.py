@@ -2,7 +2,7 @@
 
 # %% auto 0
 __all__ = ['DEFAULT_SYSTEM_PROMPT', 'DEFAULT_USER_PROMPT', 'split_pdf', 'encode_image', 'num_tokens_from_messages',
-           'extract_student_info', 'rename_exam_file', 'rename_all_exam_files']
+           'extract_student_info', 'rename_exam_file', 'rename_all_exam_files', 'prompt_ocr']
 
 # %% ../nbs/00_core.ipynb 2
 import base64
@@ -10,6 +10,8 @@ import tiktoken
 import base64
 import io
 import json
+import matplotlib.pyplot as plt
+import numpy as np
 import os
 from pdf2image import convert_from_path
 import PyPDF2
@@ -105,7 +107,8 @@ The fields of your JSON output will have those exact same label names")
 # %% ../nbs/00_core.ipynb 11
 def extract_student_info(path_pdf: str, crop=None, api_key = None, 
                  model="gpt-4o", prompt=DEFAULT_USER_PROMPT, 
-                 system_prompt=DEFAULT_SYSTEM_PROMPT, verbose=False):
+                 system_prompt=DEFAULT_SYSTEM_PROMPT, page_number=1, max_tokens=3000,
+                 verbose=False):
     """
     Extracts student information from a PDF file using OpenAI's chatGPT.
 
@@ -117,6 +120,8 @@ def extract_student_info(path_pdf: str, crop=None, api_key = None,
         model (str, optional): The model to use for generating responses.
         prompt (str, optional): The user prompt to start the conversation.
         system_prompt (str, optional): The system prompt to provide context to the model.
+        page_number (int, optional): The page number of the PDF to extract the information from.
+        max_tokens (int, optional): The maximum number of tokens to use for the response.
         verbose (bool, optional): Whether to print information about the process.
 
     Returns:
@@ -128,22 +133,17 @@ def extract_student_info(path_pdf: str, crop=None, api_key = None,
 
     """
     with open(path_pdf, 'rb') as file:
-        pdf = PyPDF2.PdfFileReader(file)
-
-        # Check if the PDF has more than one page
-        if pdf.getNumPages() > 1 and verbose:
-            print("The PDF has more than one page. Only the first page will be \
-                  converted to an image.")
-        
-        # Convert the PDF to images and get the first one
-        image = convert_from_path(path_pdf, fmt='jpeg')[0]
+        # Convert the PDF to images and get one of them
+        image = convert_from_path(path_pdf, fmt='jpeg')[page_number - 1]
 
         # Crop the image
         if crop:
             image = image.crop(crop)
         
         if verbose:
-            image.show()
+            plt.imshow(np.array(image))
+            plt.axis('off')  # Ocultar los ejes
+            plt.show()
         
         # Convert to base64
         buffered = io.BytesIO()
@@ -178,7 +178,7 @@ def extract_student_info(path_pdf: str, crop=None, api_key = None,
                     ]
                 }
             ],
-            "max_tokens": 300
+            "max_tokens": max_tokens
         }
         response = requests.post("https://api.openai.com/v1/chat/completions", 
                                  headers=headers, json=payload)
@@ -207,16 +207,17 @@ def rename_exam_file(pdf_path: str, output_folder=None, keep_old=True, **kwargs)
 
     Example:
     >>> rename_exam_file('/path/to/input.pdf', '/path/to/output', option1='value1', option2='value2')
-    'Doe_John.pdf'
+    'Doe_John'
     """
     info = extract_student_info(pdf_path, **kwargs)
-    new_name = f"{info['Apellidos']}_{info['Nombre']}.pdf"
-    new_file_path = os.path.join(output_folder, new_name)
+    new_name = f"{info['Apellidos']}_{info['Nombre']}"
+    new_file_path = os.path.join(output_folder, new_name, ".pdf")
     if not keep_old:
         os.rename(pdf_path, new_file_path)
     else:
         os.makedirs(output_folder, exist_ok=True)
-        shutil.copy(pdf_path, new_file_path)
+        if not os.path.exists(new_file_path):
+            shutil.copy(pdf_path, new_file_path)
         
     return new_name
 
@@ -244,3 +245,18 @@ def rename_all_exam_files(input_folder: str, **kwargs):
         new_name = rename_exam_file(pdf_path, output_folder=input_folder, **kwargs)
         new_names.append(new_name)
     return new_names
+
+# %% ../nbs/00_core.ipynb 17
+@delegates(extract_student_info)
+def prompt_ocr(path: str, **kwargs):
+    """  """
+    if os.path.isfile(path):
+        file_paths = [path]
+    else:
+        file_paths = [os.path.join(path, f) for f in os.listdir(path) if f.endswith('.pdf')]
+    res =[]
+    for fp in file_paths:
+        info = extract_student_info(fp, **kwargs)
+        info['file_name'] = fp
+        res.append(info)
+    return res
