@@ -2,7 +2,7 @@
 
 # %% auto 0
 __all__ = ['DEFAULT_SYSTEM_PROMPT', 'DEFAULT_USER_PROMPT', 'split_pdf', 'encode_image', 'num_tokens_from_messages',
-           'extract_student_info', 'rename_exam_file', 'rename_all_exam_files', 'prompt_ocr']
+           'extract_student_info', 'rename_exam_file', 'rename_all_exam_files', 'chat_ocr']
 
 # %% ../nbs/00_core.ipynb 2
 import base64
@@ -141,6 +141,7 @@ def extract_student_info(path_pdf: str, crop=None, api_key = None,
             image = image.crop(crop)
         
         if verbose:
+            print(path_pdf)
             plt.imshow(np.array(image))
             plt.axis('off')  # Ocultar los ejes
             plt.show()
@@ -182,7 +183,18 @@ def extract_student_info(path_pdf: str, crop=None, api_key = None,
         }
         response = requests.post("https://api.openai.com/v1/chat/completions", 
                                  headers=headers, json=payload)
-        res = json.loads(response.json()['choices'][0]['message']['content'])
+        
+        try:
+            response_content = response.json()
+            if 'choices' in response_content:
+                res = json.loads(response_content['choices'][0]['message']['content'])
+            else:
+                print("Unexpected response structure:", response_content)
+                res = {}
+        except ValueError as e:
+            print("Failed to decode JSON response:", e)
+            res = {}
+
         if verbose:
             print(res)
         
@@ -248,7 +260,7 @@ def rename_all_exam_files(input_folder: str, **kwargs):
 
 # %% ../nbs/00_core.ipynb 17
 @delegates(extract_student_info)
-def prompt_ocr(path: str, **kwargs):
+def chat_ocr(path: str, **kwargs):
     """  """
     if os.path.isfile(path):
         file_paths = [path]
