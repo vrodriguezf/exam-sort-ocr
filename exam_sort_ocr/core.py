@@ -223,7 +223,7 @@ def rename_exam_file(pdf_path: str, output_folder=None, keep_old=True, **kwargs)
     """
     info = extract_student_info(pdf_path, **kwargs)
     new_name = f"{info['Apellidos']}_{info['Nombre']}"
-    new_file_path = os.path.join(output_folder, new_name, ".pdf")
+    new_file_path = f'{output_folder}/{new_name}.pdf'
     if not keep_old:
         os.rename(pdf_path, new_file_path)
     else:
